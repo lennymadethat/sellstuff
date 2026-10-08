@@ -1,0 +1,19 @@
+{
+  "name": "sellstuff",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent Sell Stuff: snap a photo, message it on Telegram, and an agent writes the listing, prices it, and posts it to Facebook Marketplace.",
+  "license": "MIT",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail",
+    "check": "wrangler deploy --dry-run --outdir .wrangler/dry",
+    "db:init": "wrangler d1 execute sellstuff --remote --file migrations/0001_init.sql",
+    "test": "node --test poster/match.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.95.0"
+  }
+}

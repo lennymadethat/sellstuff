@@ -1,0 +1,45 @@
+# Agent Sell Stuff -- a Facebook Marketplace selling copilot. One Cloudflare Worker.
+#
+# Committed: no secrets, no account IDs. `wrangler login` supplies the account.
+# Secrets (npx wrangler secret put NAME):
+#   ADMIN_KEY                 shared secret: the poster presents it, admin routes check it
+#   IMG_TOKEN                 read-token for photo links (rides inside Telegram card URLs)
+#   TELEGRAM_BOT_TOKEN        from @BotFather
+#   TELEGRAM_WEBHOOK_SECRET   any random string (A-Z a-z 0-9 _ -); Telegram echoes it on every call
+#   TELEGRAM_CHAT_ID          your own chat id; the bot ignores everyone else
+#   ANTHROPIC_API_KEY         writes the listing and prices it (console.anthropic.com)
+#
+# Generate the random ones with:  node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+
+name = "sellstuff"
+main = "worker/src/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+# Which Claude model writes listings and answers chat. Any model that reads images.
+MODEL = "claude-sonnet-5-5"
+# Hard daily ceiling on new Facebook listings, enforced here (the poster cannot exceed it).
+MAX_POSTS_PER_DAY = "5"
+# Kill switch. Anything other than "on" and approved items simply wait.
+# Set to "off" and redeploy to stop ALL unattended browser posting.
+AUTO_POST_FB = "on"
+# Optional: your worker's public URL, no trailing slash. After your first deploy
+# uncomment it with your real URL and deploy again (used by the daily cron, which
+# has no incoming request to learn the URL from).
+# WORKER_URL = "https://YOUR_WORKER_URL"
+
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "sellstuff-photos"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sellstuff"
+database_id = "YOUR_D1_DATABASE_ID"
+
+# Daily 16:00 UTC: propose weekly price drops, nudge listings still waiting on your tap.
+[triggers]
+crons = ["0 16 * * *"]
+
+[observability]
+enabled = true

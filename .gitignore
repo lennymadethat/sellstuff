@@ -1,0 +1,20 @@
+# Secrets: never commit. Use `wrangler secret put`, or .dev.vars locally.
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+!.env.example
+
+# Poster runtime (your Chrome profile lives outside the repo, but just in case)
+poster/logs/
+poster/.env
+poster/run-poster.cmd
+poster/run-hidden.vbs
+.sellstuff-chrome/
+
+.wrangler/
+node_modules/
+npm-debug.log*
+Thumbs.db
+.DS_Store

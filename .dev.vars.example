@@ -1,0 +1,8 @@
+# Local development only (`wrangler dev` reads .dev.vars). Production uses `wrangler secret put`.
+# Copy to .dev.vars. Never commit .dev.vars.
+ADMIN_KEY = change-me
+IMG_TOKEN = change-me-too
+TELEGRAM_BOT_TOKEN =
+TELEGRAM_WEBHOOK_SECRET = change-me-three
+TELEGRAM_CHAT_ID =
+ANTHROPIC_API_KEY =
