@@ -2,6 +2,8 @@
 
 **Snap a photo. Message it to him on Telegram. He writes the listing, prices it, and posts it to Facebook Marketplace.**
 
+![Snap. Send. Sold. Snap a photo, send it on Telegram, tap Approve, and it is live on Facebook Marketplace](docs/img/1-snap-send-sold.png)
+
 "He" is a small agent that lives in two places: a Cloudflare Worker in the
 cloud, and a poster program on a computer you own. You only ever talk to the
 Telegram bot.
@@ -10,6 +12,8 @@ Telegram bot.
 > Use it on your own account at your own risk.
 
 ## What it does
+
+![One photo in, a full listing out: title, description, condition, category, asking price, and a floor price with the reasoning](docs/img/2-full-listing.png)
 
 - **Takes photos from Telegram.** Send one item's photos in one message. Add a
   caption if you want to tell it something ("works, small scratch, want $40
@@ -124,6 +128,8 @@ About 20 minutes. Prefer to have a coding agent do it? Paste
 
 ## Commands
 
+![Run the whole stall from your phone: reply to his Telegram card to set the price, set price and floor, ask why, see status, retry a post, or change the category](docs/img/3-run-from-your-phone.png)
+
 Text these to your bot. Reply to a card to aim at that item; otherwise it uses
 the most recent one.
 
@@ -143,6 +149,8 @@ the most recent one.
 | anything else | A real conversation about the item. It only changes a price if you tell it to |
 
 ## Safety rails
+
+![He posts, he never goes rogue: 5 posts a day, one at a time, 3 strikes parks an item, stops at any checkpoint, one kill switch, never reads buyer messages. It only posts, edits the price, and takes a listing down](docs/img/4-safety-rails.png)
 
 These exist so the agent can't run away with your account.
 
