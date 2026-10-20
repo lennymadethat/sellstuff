@@ -56,7 +56,7 @@ npm run db:init
 Confirm the tables exist:
 `npx wrangler d1 execute sellstuff --remote --command "SELECT name FROM sqlite_master WHERE type='table'"`
 should list `items`, `photos`, `comps`, `events`, `ledger`, `intake_buffer`,
-`decisions`, `cards`.
+`decisions`, `cards`, `kv`, `buyer_threads`, `buyer_replies`, `meetups`.
 
 **4. Deploy**
 
@@ -160,16 +160,18 @@ one `poster.mjs` process and no halt.
 
 Tell them: the Worker URL, the bot's username, where the poster runs, the
 model in use (`MODEL` in `wrangler.toml`, default `claude-sonnet-5-5`), the
-daily cap (`MAX_POSTS_PER_DAY`, default 5), and the kill switch (`AUTO_POST_FB
+daily cap (`MAX_POSTS_PER_DAY`, default 20), and the kill switch (`AUTO_POST_FB
 = "off"`, then `npx wrangler deploy`). Remind them: every listing costs a
 Claude call; nothing posts without their tap; a Facebook checkpoint halts the
-poster until they clear it and run `install.ps1 -Resume`. Point them at
-`README.md` for the command list.
+poster until they clear it and run `install.ps1 -Resume`. Ask them where pickups should happen and when
+they can meet, and have them text the bot `spot <place>` and `hours <times>`.
+Point them at `README.md` for the command list.
 
 ## Rules while you work
 
 - Their real Facebook account only. Never create or use a second account.
-- Do not touch the Facebook inbox or message anyone.
+- Never send a buyer message they did not approve on Telegram, and never start
+  a conversation with anyone.
 - Do not raise `MAX_POSTS_PER_DAY` or shorten the pauses in `poster/` to make a
   test go faster.
 - Never retry a failing post in a loop. Three strikes parks an item on purpose.

@@ -20,8 +20,8 @@ Prefer to do it yourself? [`README.md`](README.md) has the numbered steps.
 
 | Half | Lives | Does |
 |---|---|---|
-| **Worker** (`worker/`) | Cloudflare | Receives the Telegram webhook, stores photos (R2) and items (D1), makes the Claude call, sends approve cards, hands the poster one job at a time, enforces the daily cap and the three-strikes rule |
-| **Poster** (`poster/`) | A computer you own | Claims a job over an authenticated endpoint, drives your real logged-in Chrome to post, edit or delete the listing, reports back |
+| **Worker** (`worker/`) | Cloudflare | Receives the Telegram webhook, stores photos (R2) and items (D1), makes the Claude call, sends approve cards, drafts buyer replies and books pickups, hands the poster one job at a time, enforces the daily cap and the three-strikes rule |
+| **Poster** (`poster/`) | A computer you own | Claims a job over an authenticated endpoint, drives your real logged-in Chrome to post, edit or delete the listing, reads buyer chats and types the replies you approved, reports back |
 
 They talk over one shared secret (`ADMIN_KEY` on the Worker, `SELLSTUFF_ADMIN_KEY`
 in `poster/.env`).
@@ -35,13 +35,15 @@ in `poster/.env`).
 | Change how listings are written or priced | the prompt in `researchAndPropose` in `worker/src/index.js` |
 | Another currency or country | the prompt (says US dollars) and `FB_CATEGORIES`, which follow Facebook's labels for your locale |
 | Change the price-drop rule | `proposePriceDrops` (10% after 7 days, never under the floor) |
+| Change how buyer replies are written | the prompt in `draftReply` in `worker/src/inbox.js` |
+| Pickup place and times | text the bot `spot <place>` and `hours <times>` |
+| Your timezone | `TIMEZONE` in `wrangler.toml` |
 | Stop all posting right now | `AUTO_POST_FB = "off"`, then `npx wrangler deploy` |
 | Fix a broken Facebook form | `poster/fb.mjs`. Selectors match on structure and visible label text, not class names |
 
 ## What is deliberately not here
 
 - **Mercari, OfferUp, eBay.** Only Facebook Marketplace is wired up.
-- **Buyer messages.** The poster never opens the inbox and never replies.
 - **A web dashboard.** Telegram is the interface; the Worker's `/stats` and
   `/inventory` routes give you the data if you want to build one.
 

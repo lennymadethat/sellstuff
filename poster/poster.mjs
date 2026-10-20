@@ -24,7 +24,8 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { openBrowser, isLoggedIn, postListing, editListing, deleteListing } from './fb.mjs';
+import { openBrowser, isLoggedIn, sessionAlive, postListing, editListing, deleteListing } from './fb.mjs';
+import { readInbox, markReported, sendReply } from './inbox.mjs';
 import { WORKER, KEY, PROFILE_DIR, IDLE_MS, WATCH, requireConfig } from './config.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -112,7 +113,8 @@ async function sessionReady() {
   let ctx = null;
   try {
     ctx = await openBrowser({ profileDir: PROFILE_DIR, watch: false });
-    sessionOk = await isLoggedIn(ctx);
+    sessionOk = await sessionAlive(ctx);
+    if (!sessionOk) await tellSignedOut();
     return sessionOk;
   } catch (err) {
     log(`session check failed: ${String(err.message || err).slice(0, 200)}`);
@@ -384,6 +386,70 @@ async function ask(item, payload) {
   return false;
 }
 
+// Signed out is a human job (you sign in yourself), so say it once
+// per signed-out spell rather than every ten minutes.
+let toldSignedOut = false;
+async function tellSignedOut() {
+  if (toldSignedOut) return;
+  toldSignedOut = true;
+  await api('/notify', { text: '🔑 The poster\'s Chrome is signed out of Facebook, so nothing can post or answer buyers. On the poster computer run node login.mjs in the poster folder and sign in.' })
+    .catch((e) => log(`  (could not send the signed-out notice: ${String(e.message || e).slice(0, 120)})`));
+}
+
+// ---------------------------------------------------------------------------
+// Buyer messages. Between listings, the same single browser reads the
+// Marketplace inbox and sends the replies you approved on Telegram.
+// ---------------------------------------------------------------------------
+const INBOX_CACHE = path.join(LOG_DIR, 'inbox-cache.json');
+const INBOX_EVERY_MS = Number(process.env.INBOX_EVERY_MS || 8 * 60 * 1000);
+let nextInboxScan = 0;
+
+async function inboxPass() {
+  // 1. An approved reply goes out first — a buyer is waiting on it.
+  const claimRes = await api('/inbox/claim', {});
+  const claim = claimRes.ok ? await claimRes.json() : { reply: null };
+  const due = Date.now() >= nextInboxScan;
+  if (!claim.reply && !due) return false;
+
+  let ctx = null;
+  try {
+    ctx = await openBrowser({ profileDir: PROFILE_DIR, watch: WATCH });
+    if (claim.reply) {
+      const r = claim.reply;
+      log(`sending approved reply #${r.id} to ${r.buyer_name || r.thread_key}`);
+      try {
+        await sendReply(ctx, r, { log: (m) => log(`  [reply] ${m}`) });
+        await api(`/inbox/${r.id}/sent`, {}, { tries: 6 });
+      } catch (err) {
+        const reason = String(err.message || err).slice(0, 300);
+        log(`REPLY FAILED #${r.id}: ${reason}`);
+        await api(`/inbox/${r.id}/failed`, { reason, checkpoint: !!err.checkpoint, definitely_not_sent: !!err.definitelyNotSent })
+          .catch((e) => log(`  (could not report reply failure: ${String(e.message || e).slice(0, 120)})`));
+        if (err.checkpoint) { halt(reason); return true; }
+      }
+    }
+    if (due) {
+      nextInboxScan = Date.now() + INBOX_EVERY_MS + Math.floor(Math.random() * 4 * 60 * 1000);
+      const threads = await readInbox(ctx, { cacheFile: INBOX_CACHE, log: (m) => log(`  ${m}`) });
+      if (threads.length) {
+        const res = await api('/inbox/report', { threads: threads.map(({ _snippet, ...t }) => t) }, { timeoutMs: 180000 });
+        const j = await res.json().catch(() => ({}));
+        const ok = (j.results || []).filter((x) => !x.error).map((x) => x.thread_key);
+        markReported(INBOX_CACHE, threads.filter((t) => ok.includes(t.thread_key)));
+        log(`inbox: reported ${threads.length}, ${(j.results || []).filter((x) => x.reply_id).length} new draft(s) sent to Telegram`);
+      }
+    }
+    return true;
+  } catch (err) {
+    const reason = String(err.message || err).slice(0, 300);
+    log(`inbox pass error: ${reason}`);
+    if (err.checkpoint) halt(reason);
+    return true;
+  } finally {
+    if (ctx) await ctx.close().catch(() => {});
+  }
+}
+
 async function main() {
   log(`sellstuff-poster up — worker=${WORKER} profile=${PROFILE_DIR} idle=${IDLE_MS}ms${DRY ? ' DRY' : ''}${WATCH ? ' WATCH' : ''}${ONCE ? ' ONCE' : ''}`);
   for (;;) {
@@ -396,6 +462,9 @@ async function main() {
     let did = false;
     try {
       did = await runOne();
+      // Buyers only when no listing work happened this turn, and only while
+      // the session is good -- one browser, one job at a time.
+      if (!did && sessionOk && !existsSync(HALT_FILE)) did = await inboxPass();
     } catch (err) {
       // api() now names the endpoint and the real cause, so this stops being
       // eight identical "fetch failed" lines that say nothing.

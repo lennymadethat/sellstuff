@@ -40,6 +40,22 @@ The poster claims one of three kinds of job, in this order:
 
 Deletes and edits don't count against the daily cap.
 
+## Buyer messages and pickups
+
+| # | Who | What happens |
+|---|---|---|
+| 1 | Poster | Between listings, every 8 to 12 minutes, it opens the Marketplace chats that changed and reads the last messages of each. It types nothing. |
+| 2 | Poster to Worker | `POST /inbox/report` with each thread's buyer, listing title and messages. |
+| 3 | Worker to Claude | For a thread where the buyer spoke last, one short text call drafts a reply from your listing, your floor, your `spot` and your `hours`. |
+| 4 | Worker to you | A card: the buyer's words, the draft, and **Send** / **Skip** / **Ignore this buyer**. Reply to the card with your own words to send those instead. |
+| 5 | Poster | Claims one approved reply (`POST /inbox/claim`), types it into that exact chat at human speed, and checks it appears. |
+| 6 | Poster to Worker | `POST /inbox/<id>/sent` or `/failed`. A send that might have gone out is never retyped; you are told to check the chat. |
+| 7 | Worker | If the reply confirmed a pickup time, it books a meetup and sends you a Google Calendar link. |
+| 8 | Cron, every 15 min | A reminder an hour before; an hour after, "did it sell?" **Sold** logs the sale and queues the listing for deletion. |
+
+If the buyer writes again before you answer, the old draft is replaced by a new
+card.
+
 ## Questions instead of guesses
 
 When the agent can't be sure, it asks. Each is a Telegram card with buttons:
@@ -78,6 +94,8 @@ message naming any card you haven't tapped in 2 days.
 | Worker | `worker/src/index.js` |
 | Browser driver | `poster/fb.mjs` |
 | Poll loop | `poster/poster.mjs` |
+| Buyer chats (read + send) | `poster/inbox.mjs` |
+| Drafts, reply cards, pickups | `worker/src/inbox.js` |
 | Poster log | `poster/logs/poster.log` |
 | Manual brake | `poster/logs/HALTED` |
 | Database | `migrations/0001_init.sql` |

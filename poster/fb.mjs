@@ -350,6 +350,19 @@ export async function isLoggedIn(ctx) {
   return cookies.some((c) => c.name === 'c_user' && c.value);
 }
 
+// The cookie check above is not enough on its own: a profile can keep its
+// c_user cookie while every page shows the Log In box. This loads a page and
+// looks.
+export async function sessionAlive(ctx) {
+  if (!await isLoggedIn(ctx)) return false;
+  const page = ctx.pages()[0] || await ctx.newPage();
+  await page.goto('https://www.facebook.com/marketplace/you/selling', { waitUntil: 'domcontentloaded' });
+  await sleep(rnd(4000, 6000));
+  if (/\/login|\/checkpoint\//.test(page.url())) return false;
+  const loginBox = await page.locator('input[name="pass"]').first().isVisible().catch(() => false);
+  return !loginBox;
+}
+
 // ---------------------------------------------------------------------------
 // The post
 // ---------------------------------------------------------------------------

@@ -18,8 +18,10 @@ compatibility_date = "2025-01-01"
 [vars]
 # Which Claude model writes listings and answers chat. Any model that reads images.
 MODEL = "claude-sonnet-5-5"
-# Hard daily ceiling on new Facebook listings, enforced here (the poster cannot exceed it).
-MAX_POSTS_PER_DAY = "5"
+# Daily ceiling on new Facebook listings, enforced here (the poster cannot exceed it).
+MAX_POSTS_PER_DAY = "20"
+# Your timezone, for pickup times, reminders and the calendar link.
+TIMEZONE = "America/Los_Angeles"
 # Kill switch. Anything other than "on" and approved items simply wait.
 # Set to "off" and redeploy to stop ALL unattended browser posting.
 AUTO_POST_FB = "on"
@@ -38,8 +40,9 @@ database_name = "sellstuff"
 database_id = "YOUR_D1_DATABASE_ID"
 
 # Daily 16:00 UTC: propose weekly price drops, nudge listings still waiting on your tap.
+# Every 15 minutes: pickup reminders and "did it sell?" cards.
 [triggers]
-crons = ["0 16 * * *"]
+crons = ["0 16 * * *", "*/15 * * * *"]
 
 [observability]
 enabled = true

@@ -1,6 +1,6 @@
 # Agent Sell Stuff
 
-**Snap a photo. Message it to him on Telegram. He writes the listing, prices it, and posts it to Facebook Marketplace.**
+**Snap a photo. Message it to him on Telegram. He writes the listing, prices it, posts it to Facebook Marketplace, and answers your buyers. You approve every word.**
 
 ![Snap. Send. Sold. Snap a photo, send it on Telegram, tap Approve, and it is live on Facebook Marketplace](docs/img/1-snap-send-sold.png)
 
@@ -30,6 +30,13 @@ Telegram bot.
 - **Looks after it.** Edits the price on a live listing, deletes a listing when
   you say so, proposes a 10% price drop after a week, and nudges you about
   cards you never tapped.
+- **Talks to your buyers.** When someone messages about a listing, he reads it,
+  drafts a reply and sends you both on Telegram. Tap **Send**, tap **Skip**, or
+  reply to the card with your own words. Nothing reaches a buyer without you.
+- **Sets up the pickup.** Once a buyer wants it, he offers times inside your
+  hours at the spot you choose. When they agree, the confirmation card books
+  it: a Google Calendar link, a reminder an hour before, and a "did it sell?"
+  card afterwards that logs the sale and takes the listing down.
 - **Asks instead of guessing.** Any judgement call (which of two similar
   listings is this one? is it already gone?) comes to you as a Telegram
   question with buttons.
@@ -42,6 +49,10 @@ Telegram bot.
                                               ▲
  your computer: poster ──claim one item──────┘   (shared secret)
    └─> your real Chrome ──> Facebook Marketplace ──> reports back "posted"
+
+ buyer messages ──> poster reads the inbox ──> Worker drafts a reply
+          reply card (Send / Skip / your own words) <───┘
+ you ──tap Send──> poster types it into that chat ──> pickup booked + reminder
 ```
 
 ## What you need
@@ -124,7 +135,12 @@ About 20 minutes. Prefer to have a coding agent do it? Paste
 9. **Try it.** Send the bot photos of something you want to sell. In a minute
    you get a card. Tap Approve. To watch the poster fill the form without
    publishing, run `node poster.mjs --once --dry` from the `poster` folder
-   after approving.
+   after approving. Then text the bot `spot` and `hours` (see
+   [Talking to buyers](#talking-to-buyers)) so pickups land where and when you
+   want.
+
+Already running an older copy? Pull, run `npm run db:buyers`, deploy, and
+restart the poster.
 
 ## Commands
 
@@ -146,33 +162,45 @@ the most recent one.
 | `category Tools` | Change the category |
 | `sold 40` | Log a sale |
 | `remove` (as a reply to a card) | Delete the listing from Facebook. A delete, never "mark as sold" |
+| your own words (as a reply to a buyer card) | Sends exactly what you typed instead of the draft |
+| `spot Starbucks on 5th Ave` | Where pickups happen. Buyers never get your address |
+| `hours weekdays 6-8pm, Sat 10-2` | When you can meet. Pickup times are only offered inside these |
+| `meetups` | Upcoming pickups |
+| `buyers` | Replies waiting on you, queued, or failed |
 | anything else | A real conversation about the item. It only changes a price if you tell it to |
 
-## Safety rails
+## Talking to buyers
 
-![He posts, he never goes rogue: 5 posts a day, one at a time, 3 strikes parks an item, stops at any checkpoint, one kill switch, never reads buyer messages. It only posts, edits the price, and takes a listing down](docs/img/4-safety-rails.png)
+![He talks to buyers, you get the final say: reads new buyer messages, drafts every reply, never below your floor, sends only after your tap, books the pickup, reminds you an hour before](docs/img/4-talks-to-buyers.png)
 
-These exist so the agent can't run away with your account.
+Set two things once, by texting your bot:
 
-- **You tap Approve on every listing.** Nothing posts itself.
-- **5 new listings a day.** Set by `MAX_POSTS_PER_DAY`. The Worker enforces it,
-  so the poster can't exceed it even if told to.
-- **One thing at a time.** Claims are locked in the database, so two browsers
-  never drive your account together. There is a real 4 to 7 minute gap between
-  listings, random pauses between form fields, and per-character typing.
-- **Three failures park an item.** After 3 failed tries it goes to
-  `needs_attention`, you get one message, and it is not retried until you send
-  `retry`. A retry loop is the pattern that gets accounts flagged.
-- **A Facebook checkpoint halts everything.** If Facebook shows a captcha, an
-  identity check or an "unusual activity" screen, the poster stops, writes
-  `poster/logs/HALTED`, tells you on Telegram, and refuses to claim anything
-  until you clear it in Chrome and run `install.ps1 -Resume`.
+```
+spot Starbucks on 5th Ave
+hours weekdays 6-8pm, weekends 10am-4pm
+```
+
+Then every new buyer message turns into a card with their words and a draft
+reply. The draft answers from your listing, counters lowball offers without
+going under your floor, and never gives out your address. If the buyer tries
+something odd (a payment link, a "verification code"), the draft is a polite no
+and the card tells you why.
+
+When a buyer agrees to a time, the card says **Send + book pickup**. One tap
+sends the confirmation and books it.
+
+## Guardrails
+
+- **You approve every listing and every reply.** Nothing is posted or sent
+  without your tap.
+- **Paced like a person.** One thing at a time, a few minutes between
+  listings, random pauses and per-character typing. The daily ceiling is
+  yours to set (`MAX_POSTS_PER_DAY`).
+- **Three failures park an item** until you send `retry`, instead of retrying
+  in a loop.
 - **Kill switch.** Set `AUTO_POST_FB = "off"` in `wrangler.toml` and run
-  `npx wrangler deploy`. Approved items wait; the poster does nothing.
+  `npx wrangler deploy`.
 - **Your real account only.** Never a second or burner account.
-- **It never reads or sends Facebook messages.** The poster posts, edits and
-  deletes listings. That is all.
-- **Meta AI auto-reply is left off** on listings it posts.
 - **Private by default.** The bot answers only your chat id. The Worker's admin
   routes need your `ADMIN_KEY`. Photos are served only with your `IMG_TOKEN`.
 
@@ -182,22 +210,25 @@ More in [`docs/SAFETY.md`](docs/SAFETY.md).
 
 Cloudflare Workers, D1 and R2 are cheap and have free allowances. Telegram is
 free. The only metered thing is Claude: one call per new listing (the photos
-are most of the cost) and a small text-only call when you chat about an item.
+are most of the cost), and a small text-only call per buyer message or when you
+chat about an item.
 Typing `why`, `status`, a price, or any other command costs nothing. Check your
 chosen model's price page for the exact numbers.
 
 ## What is in the box
 
 ```
-worker/src/index.js        the whole Worker (Telegram, state, pricing, claim queue)
+worker/src/index.js        the Worker (Telegram, state, pricing, claim queue)
+worker/src/inbox.js        buyer messages, reply cards, pickups and reminders
 poster/                    runs on your computer
-  poster.mjs               claim -> post / edit / delete -> report loop
+  poster.mjs               claim -> post / edit / delete -> report loop, then buyers
   fb.mjs                   the Marketplace form driver
+  inbox.mjs                reads Marketplace chats, types replies you approved
   match.mjs (+ test)       matches your listing to a card on Your listings
   login.mjs                one-time Facebook sign-in
   install.ps1              start-at-logon, -Status, -Resume, -Uninstall
   backfill-permalinks.mjs  repairs missing listing links
-migrations/0001_init.sql   the database
+migrations/                the database (0001 listings, 0002 buyers + pickups)
 wrangler.toml              Worker config with placeholders
 docs/                      how it works, safety, API, troubleshooting
 AGENTS.md                  paste into a coding agent to set it all up

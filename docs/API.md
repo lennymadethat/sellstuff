@@ -35,6 +35,12 @@ header, with the key from `poster/.env`.
 | `POST /items/<slug>/removed`, `/remove-failed` | A delete finished or failed. |
 | `POST /items/<slug>/link` | Record a listing's Facebook link. |
 | `POST /items/<slug>/ask` | Raise a Telegram question. `{kind, question, body?, choices: [{key, text}], payload?}` |
+| `POST /inbox/report` | `{threads: [{thread_key, thread_url, buyer_name, listing_title, messages: [{dir: "in" \| "out", body}]}]}` Drafts a reply card for each thread where the buyer spoke last. |
+| `POST /inbox/claim` | Hands out one approved reply: `{reply: {id, thread_key, thread_url, buyer_name, text}}`, or `{reply: null, reason}`. |
+| `POST /inbox/<id>/sent` | The reply is in the chat. Books the pickup if it confirmed one. |
+| `POST /inbox/<id>/failed` | `{reason, checkpoint?, definitely_not_sent?}` |
+| `POST /notify` | `{text}` A plain message to your Telegram (e.g. "Chrome is signed out"). |
+| `POST /meetup-tick` | Run the pickup reminder / "did it sell?" pass now. |
 
 ## Item management
 

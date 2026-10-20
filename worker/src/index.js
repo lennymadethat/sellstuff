@@ -28,6 +28,40 @@
 // parking an item here makes it structurally unreachable by the poster. That is
 // the whole point: a deterministic failure (bad category, missing field) is not
 // fixed by trying again, and retrying it is how an account gets flagged.
+import {
+  inboxReport, inboxClaim, inboxSent, inboxFailed, applyReplyDecision, replyFromTelegram, replyIdFromCard,
+  applyMeetupDecision, meetupTick, inboxCommand, INBOX_HELP, useTimezone,
+} from './inbox.js';
+
+// Helpers the buyer-message lane (inbox.js) borrows. Function declarations are
+// hoisted, so this object can sit above them.
+const H = {
+  json: (...a) => json(...a),
+  esc: (s) => esc(s),
+  tgSend: (...a) => tgSend(...a),
+  parseJson: (s) => parseJson(s),
+  logEvent: (...a) => logEvent(...a),
+  anthropic: (env, { body }) => {
+    if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set');
+    return fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body,
+    });
+  },
+  // inbox.js speaks in {text, decision} choices; a Telegram button carries the
+  // decision string as its callback_data (always well under 64 bytes).
+  sendHubCard: (env, item, heroKey, _summary, choices, _extId) => sendCard(
+    env,
+    item && item.id ? item : null,
+    heroKey,
+    `<b>${esc(item.title || '')}</b>
+
+${esc(item.description || '')}`,
+    choices.map((c) => ({ text: c.text, callback_data: c.decision })),
+  ),
+};
+
 const STATUSES = ['draft', 'researched', 'pending_approval', 'approved', 'posting', 'posted', 'sold', 'rejected', 'archived', 'needs_attention'];
 const EVENT_TYPES = ['intake', 'research', 'proposed', 'approved', 'rejected', 'posted', 'sold', 'archived', 'note'];
 
@@ -427,6 +461,16 @@ async function handleTap(env, ctx, data) {
   const parts = String(data || '').split(':');
   const kind = parts[0];
 
+  // Buyer replies and pickups (inbox.js).
+  if (kind === 'reply' || kind === 'meet') {
+    const res = kind === 'reply'
+      ? await applyReplyDecision(env, H, Number(parts[1]), parts[2])
+      : await applyMeetupDecision(env, H, Number(parts[1]), parts[2], markSold);
+    const j = await res.json().catch(() => ({}));
+    const toast = { send: 'Sending', skip: 'Skipped', mute: 'Ignoring this buyer', sold: 'Logged as sold', noshow: 'Noted', cancel: 'Cancelled' }[parts[2]];
+    return { toast: j.ok ? (j.idempotent ? 'Already handled' : toast || 'Done') : 'That card is no longer valid.' };
+  }
+
   if (kind === 'dc') {
     const decisionId = Number(parts[1]);
     const idx = Number(parts[2]);
@@ -487,7 +531,7 @@ async function queue(env, url) {
 
   let limit = null;
   if (status === 'approved') {
-    const cap = parseInt(env.MAX_POSTS_PER_DAY, 10) || 5;
+    const cap = parseInt(env.MAX_POSTS_PER_DAY, 10) || 20;
     const today = await env.DB.prepare("SELECT COUNT(*) AS n FROM items WHERE posted_at IS NOT NULL AND date(posted_at)=date('now')").first();
     if (today.n >= cap) return json({ ok: true, items: [], capped: true, posted_today: today.n });
     limit = cap - today.n;
@@ -602,7 +646,7 @@ async function claimForPosting(env, body) {
   }
 
   // 2. Otherwise, check for new posts (subject to daily cap)
-  const cap = parseInt(env.MAX_POSTS_PER_DAY, 10) || 5;
+  const cap = parseInt(env.MAX_POSTS_PER_DAY, 10) || 20;
   const today = await env.DB.prepare("SELECT COUNT(*) AS n FROM items WHERE posted_at IS NOT NULL AND date(posted_at)=date('now')").first();
   if (today.n >= cap) return json({ ok: true, item: null, reason: 'daily-cap', posted_today: today.n });
 
@@ -1237,7 +1281,15 @@ async function tgText(env, msg) {
   if (!raw) return json({ ok: true, ignored: 'empty' });
   const low = raw.toLowerCase().replace(/^\//, '');
 
-  if (low === 'help' || low === 'start') { await tgSend(env, HELP); return json({ ok: true, cmd: 'help' }); }
+  if (low === 'help' || low === 'start') { await tgSend(env, HELP + INBOX_HELP); return json({ ok: true, cmd: 'help' }); }
+
+  // A reply to a buyer card is the message you want sent -- check this before
+  // anything else, or "250" typed as a reply would reprice an item instead.
+  const replyId = replyIdFromCard(msg);
+  if (replyId) return replyFromTelegram(env, H, replyId, raw);
+
+  const inboxRes = await inboxCommand(env, H, low, raw);
+  if (inboxRes) return inboxRes;
 
   if (low === 'status') {
     const rows = await env.DB.prepare(
@@ -1729,6 +1781,7 @@ export default {
     // Card photo links need the worker's own public URL. Prefer the configured
     // one; otherwise learn it from the first request.
     if (!env.WORKER_URL) env.WORKER_URL = url.origin;
+    useTimezone(env.TIMEZONE);
 
     if (path === '/health') return json({ ok: true, worker: 'sellstuff' });
 
@@ -1773,6 +1826,25 @@ export default {
     if (path === '/post-queue/claim' && method === 'POST') {
       return claimForPosting(env, await request.json().catch(() => ({})));
     }
+    // Buyer messages: the poster reports threads, claims one approved reply at
+    // a time, and reports how the send went.
+    if (path === '/inbox/report' && method === 'POST') {
+      return inboxReport(env, H, await request.json().catch(() => ({})));
+    }
+    if (path === '/inbox/claim' && method === 'POST') return inboxClaim(env, H);
+    const ib = path.match(/^\/inbox\/(\d+)\/(sent|failed)$/);
+    if (ib && method === 'POST') {
+      const b = await request.json().catch(() => ({}));
+      return ib[2] === 'sent' ? inboxSent(env, H, Number(ib[1])) : inboxFailed(env, H, Number(ib[1]), b);
+    }
+    // Plain notice from the poster (e.g. "Chrome is signed out").
+    if (path === '/notify' && method === 'POST') {
+      const b = await request.json().catch(() => ({}));
+      if (!b.text) return json({ ok: false, error: 'text required' }, 400);
+      await tgSend(env, esc(String(b.text).slice(0, 1500)));
+      return json({ ok: true });
+    }
+    if (path === '/meetup-tick' && method === 'POST') return json({ ok: true, ...(await meetupTick(env, H)) });
     if (path === '/decisions' && method === 'GET') {
       const rows = await env.DB.prepare(
         `SELECT d.id, d.kind, d.question, d.choices, d.status, d.answer, d.created_at, d.answered_at, i.slug, i.title
@@ -1827,8 +1899,14 @@ export default {
 
     return json({ ok: false, error: 'not found' }, 404);
   },
-  // Daily cron: propose weekly price drops, nudge stale approvals.
+  // Two crons: daily price drops + nudges, and a 15-minute pickup tick
+  // (hour-before reminders and "did it sell?" cards).
   async scheduled(controller, env, ctx) {
+    useTimezone(env.TIMEZONE);
+    if (controller.cron === '*/15 * * * *') {
+      ctx.waitUntil(meetupTick(env, H));
+      return;
+    }
     ctx.waitUntil((async () => {
       await proposePriceDrops(env);
       await nudgeStaleApprovals(env);

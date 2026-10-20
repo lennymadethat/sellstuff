@@ -10,7 +10,8 @@
     "dev": "wrangler dev",
     "tail": "wrangler tail",
     "check": "wrangler deploy --dry-run --outdir .wrangler/dry",
-    "db:init": "wrangler d1 execute sellstuff --remote --file migrations/0001_init.sql",
+    "db:init": "wrangler d1 execute sellstuff --remote --file migrations/0001_init.sql && wrangler d1 execute sellstuff --remote --file migrations/0002_buyers.sql",
+    "db:buyers": "wrangler d1 execute sellstuff --remote --file migrations/0002_buyers.sql",
     "test": "node --test poster/match.test.mjs"
   },
   "devDependencies": {

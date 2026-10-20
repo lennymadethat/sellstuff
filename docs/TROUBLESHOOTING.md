@@ -12,6 +12,8 @@ Work down this list.
 | Approved items sit there | Claims return `daily-cap`, `already-posting`, or `auto-post-off`. | The poster log says which. The cap resets at midnight UTC. |
 | Poster says the profile isn't signed in | The Facebook session expired. | `node login.mjs` in `poster/`, sign in by hand. |
 | `*** LANE HALTED ***` | Facebook showed a checkpoint. Screenshots are in `poster/logs/shots/`. | Sort it out in Chrome yourself, then `install.ps1 -Resume`. |
+| Buyers message you but no reply cards come | The poster only reads chats between listings, and only while signed in. `buyers` in Telegram lists what is waiting. | Check the poster log for `inbox:` lines. Run `npm run db:buyers` if you upgraded from an older copy. |
+| A reply card says it couldn't send | The chat wouldn't open, or the poster couldn't see its message afterwards. | Open the chat in Messenger. If it went out, do nothing; if not, send it yourself or reply to the card with the text. |
 | An item is `needs_attention` | It failed 3 times. The reason is in `status` and `why`. | Fix the cause (try `category Tools`), then send `retry`. |
 | Nothing at all is happening, and no errors | Cards waiting on your tap. | `GET /stats`: `pending > 0` with `approved: 0` means it is waiting on you. The daily nudge names them. |
 | An edit or delete keeps failing with "which listing" | Two near-identical listings. | Answer the Telegram question; your pick is remembered. |

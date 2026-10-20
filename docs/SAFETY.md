@@ -11,16 +11,18 @@ enforced in code, not just promised.
 | # | Rule | Where it is enforced |
 |---|---|---|
 | 1 | **Your real account only.** Never a second, burner or alias account. | The poster uses one Chrome profile that you signed into yourself. |
-| 2 | **A human tap on every listing.** Nothing publishes without Approve. | The Worker only ever hands the poster items in `approved`. |
+| 2 | **A human tap on every listing and every reply.** Nothing publishes without Approve; no buyer message goes out without Send or your own typed words. | The Worker only ever hands the poster items in `approved`, and replies in `approved`. Only a tap on that reply's card, or text you typed in reply to it, sets that. |
 | 3 | **Human speed.** Random pauses between fields, per-character typing, 4 to 7 minutes between listings. | `poster/fb.mjs`, `poster/poster.mjs` |
-| 4 | **Daily cap.** 5 new listings a day by default (`MAX_POSTS_PER_DAY`). | The Worker's claim endpoint. The poster can't exceed it. |
+| 4 | **Daily cap.** 20 new listings a day by default; set your own with `MAX_POSTS_PER_DAY`. | The Worker's claim endpoint. The poster can't exceed it. |
 | 5 | **One at a time.** | `posting` status is a database lock, plus `edit_queued=2` and `delete_queued=2`. |
 | 6 | **Three strikes.** After 3 failed attempts an item is parked as `needs_attention` and not retried. | Worker `markPostFailed`. The claim query never selects parked items. |
 | 7 | **Stop on friction.** A checkpoint, captcha, identity prompt or "unusual activity" screen ends the run untouched and halts the whole lane. | `poster/fb.mjs` scans after every stage. `poster/logs/HALTED` stops the loop until you run `install.ps1 -Resume`. |
 | 8 | **Kill switch.** | `AUTO_POST_FB = "off"` in `wrangler.toml`, then `npx wrangler deploy`. |
-| 9 | **Post, edit, delete. Nothing else.** It never opens Marketplace messages and never replies to a buyer. | The poster has no code that touches the inbox. |
+| 9 | **Replies, never conversations it starts.** The poster reads chats and answers only a thread where the buyer spoke last, one reply at a time. A send that dies halfway is reported to you, never retyped. | `poster/inbox.mjs`, Worker `inboxClaim` / `inboxFailed`. |
+| 9a | **Never your address, never under your floor.** Pickups are offered only at your `spot`, inside your `hours`. A draft that agrees a price under your floor is flagged on the card. | Worker `draftReply` in `worker/src/inbox.js`. |
+| 9b | **Buyer messages are data.** A link, a payment request or a "verification code" gets a polite decline draft and a note to you. | The drafting prompt; you still see every draft before it is sent. |
 | 10 | **Delete is not "mark as sold".** Facebook is never told whether an item sold. | `deleteListing` in `poster/fb.mjs`. |
-| 11 | **Meta AI auto-reply stays off.** Switching on something that answers buyers in your name is your decision. | `postListing` drives the toggle to off. |
+| 11 | **Meta AI auto-reply stays off.** The agent's drafts, approved by you, are the only replies. | `postListing` drives the toggle to off. |
 | 12 | **Questions, not guesses.** The agent asks before binning, relinking, archiving or going under your floor. | Worker `askDecision`. |
 | 13 | **Private by default.** The bot answers only your chat id; admin routes need `ADMIN_KEY`; photo links need `IMG_TOKEN`. | Worker `handleUpdate`, `authed`, `serveImg`. |
 
