@@ -37,6 +37,9 @@ Telegram bot.
   hours at the spot you choose. When they agree, the confirmation card books
   it: a Google Calendar link, a reminder an hour before, and a "did it sell?"
   card afterwards that logs the sale and takes the listing down.
+- **Checks Facebook for real.** On start and every few hours the poster reads
+  your Your listings page. Anything you deleted or sold yourself is cleared
+  from its records, so it never nags you about it again.
 - **Asks instead of guessing.** Any judgement call (which of two similar
   listings is this one? is it already gone?) comes to you as a Telegram
   question with buttons.
@@ -151,7 +154,7 @@ the most recent one.
 
 | You send | What happens |
 |---|---|
-| photos (one message) | New listing: researched, priced, card sent |
+| photos (one message) | New listing: researched, priced, card sent. The card asks for your floor |
 | `250` or `$250` | Set the asking price (a live listing gets edited on Facebook) |
 | `floor 100` | Set your walk-away price |
 | `250/100` | Both at once |
@@ -167,6 +170,7 @@ the most recent one.
 | `hours weekdays 6-8pm, Sat 10-2` | When you can meet. Pickup times are only offered inside these |
 | `meetups` | Upcoming pickups |
 | `buyers` | Replies waiting on you, queued, or failed |
+| `clear old` | Bin listing cards you never approved (sold or gone already) |
 | anything else | A real conversation about the item. It only changes a price if you tell it to |
 
 ## Talking to buyers
@@ -193,9 +197,9 @@ sends the confirmation and books it.
 
 - **You approve every listing and every reply.** Nothing is posted or sent
   without your tap.
-- **Paced like a person.** One thing at a time, a few minutes between
-  listings, random pauses and per-character typing. The daily ceiling is
-  yours to set (`MAX_POSTS_PER_DAY`).
+- **No daily limit, paced like a person.** List as much as you like. It does
+  one thing at a time, a few minutes apart, with random pauses and
+  per-character typing. Want a ceiling? Set `MAX_POSTS_PER_DAY`.
 - **Three failures park an item** until you send `retry`, instead of retrying
   in a loop.
 - **Kill switch.** Set `AUTO_POST_FB = "off"` in `wrangler.toml` and run

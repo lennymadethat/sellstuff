@@ -9,7 +9,8 @@ Work down this list.
 | The bot replies "Your chat id is ..." | `TELEGRAM_CHAT_ID` isn't set. | `npx wrangler secret put TELEGRAM_CHAT_ID` with that number. |
 | Cards arrive as text with no photo | Telegram couldn't fetch the photo link. | Set `WORKER_URL` in `wrangler.toml` and redeploy. Check `IMG_TOKEN` is set. |
 | You tapped Approve, nothing posts | `AUTO_POST_FB` isn't `"on"`, the poster isn't running, or it is halted. | `powershell -File poster/install.ps1 -Status` shows all three. |
-| Approved items sit there | Claims return `daily-cap`, `already-posting`, or `auto-post-off`. | The poster log says which. The cap resets at midnight UTC. |
+| Approved items sit there | Claims return `already-posting`, `auto-post-off`, or `daily-cap` (only if you set `MAX_POSTS_PER_DAY`). | The poster log says which. A cap resets at midnight UTC. |
+| It mentions a listing you already took down | The poster hasn't synced since (it needs to be signed in). | Check the log for `sync:` lines. It syncs on start and every 6 hours. |
 | Poster says the profile isn't signed in | The Facebook session expired. | `node login.mjs` in `poster/`, sign in by hand. |
 | `*** LANE HALTED ***` | Facebook showed a checkpoint. Screenshots are in `poster/logs/shots/`. | Sort it out in Chrome yourself, then `install.ps1 -Resume`. |
 | Buyers message you but no reply cards come | The poster only reads chats between listings, and only while signed in. `buyers` in Telegram lists what is waiting. | Check the poster log for `inbox:` lines. Run `npm run db:buyers` if you upgraded from an older copy. |

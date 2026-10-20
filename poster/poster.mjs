@@ -24,7 +24,7 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { openBrowser, isLoggedIn, sessionAlive, postListing, editListing, deleteListing } from './fb.mjs';
+import { openBrowser, isLoggedIn, sessionAlive, postListing, editListing, deleteListing, readAllSellingCards } from './fb.mjs';
 import { readInbox, markReported, sendReply } from './inbox.mjs';
 import { WORKER, KEY, PROFILE_DIR, IDLE_MS, WATCH, requireConfig } from './config.mjs';
 
@@ -450,6 +450,41 @@ async function inboxPass() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Facebook sync. On start and every ~6 hours, read Your listings and let the
+// Worker correct its records: things you deleted or sold yourself stop being
+// talked about. Facebook is the truth.
+// ---------------------------------------------------------------------------
+const SYNC_EVERY_MS = Number(process.env.SYNC_EVERY_MS || 6 * 60 * 60 * 1000);
+let nextSync = 0;
+
+async function syncPass() {
+  if (Date.now() < nextSync) return false;
+  nextSync = Date.now() + SYNC_EVERY_MS;
+  let ctx = null;
+  try {
+    ctx = await openBrowser({ profileDir: PROFILE_DIR, watch: WATCH });
+    const scan = await readAllSellingCards(ctx, (m) => log(`  ${m}`));
+    if (!scan.complete) {
+      log(`sync skipped: ${scan.why || 'page did not finish loading'} — nothing changed`);
+      nextSync = Date.now() + 30 * 60 * 1000;
+      return true;
+    }
+    const res = await api('/sync', { cards: scan.cards, complete: true }, { timeoutMs: 60000 });
+    const j = await res.json().catch(() => ({}));
+    log(`sync: ${JSON.stringify({ active: j.active, sold: (j.sold || []).length, gone: (j.gone || []).length, asked: j.asked || false })}`);
+    return true;
+  } catch (err) {
+    const reason = String(err.message || err).slice(0, 300);
+    log(`sync error: ${reason}`);
+    nextSync = Date.now() + 30 * 60 * 1000;
+    if (err.checkpoint) halt(reason);
+    return true;
+  } finally {
+    if (ctx) await ctx.close().catch(() => {});
+  }
+}
+
 async function main() {
   log(`sellstuff-poster up — worker=${WORKER} profile=${PROFILE_DIR} idle=${IDLE_MS}ms${DRY ? ' DRY' : ''}${WATCH ? ' WATCH' : ''}${ONCE ? ' ONCE' : ''}`);
   for (;;) {
@@ -461,7 +496,10 @@ async function main() {
     }
     let did = false;
     try {
-      did = await runOne();
+      // Sync with Facebook first when it is due, so no post, edit or delete is
+      // claimed on stale records (a listing you already took down yourself).
+      if (Date.now() >= nextSync && await sessionReady()) did = await syncPass();
+      if (!did) did = await runOne();
       // Buyers only when no listing work happened this turn, and only while
       // the session is good -- one browser, one job at a time.
       if (!did && sessionOk && !existsSync(HALT_FILE)) did = await inboxPass();

@@ -1066,6 +1066,34 @@ export async function debugExtractSellingCards(page) {
   return extractSellingCards(page);
 }
 
+// Facebook sync: read EVERY card on Your listings with its state,
+// so the desk can be corrected to what is really on Facebook. Read-only — it
+// scrolls and reads, never clicks a card. `complete` is true only when the page
+// was really the signed-in selling page and the card count stopped growing.
+export async function readAllSellingCards(ctx, log = () => {}) {
+  const page = ctx.pages()[0] || await ctx.newPage();
+  await page.goto('https://www.facebook.com/marketplace/you/selling', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await pause(4000, 6000);
+  await assertNoFriction(page, 'sync: your listings');
+  if (!/\/marketplace\/you\/selling/.test(page.url())) return { cards: [], complete: false, why: `landed on ${page.url()}` };
+  if (await page.locator('input[name="pass"]').first().isVisible().catch(() => false)) return { cards: [], complete: false, why: 'signed out' };
+  let last = -1; let cards = []; let still = 0;
+  for (let i = 0; i < 40 && still < 3; i++) {
+    cards = await extractSellingCards(page);
+    if (cards.length === last) still++; else { still = 0; last = cards.length; }
+    await page.mouse.wheel(0, rnd(1400, 2200));
+    await pause(1200, 2200);
+  }
+  await assertNoFriction(page, 'sync: after scroll');
+  const out = cards.map((c) => ({
+    id: c.id,
+    title: c.title,
+    state: /mark as available|relist/i.test(c.text) || /(^|\n)\s*sold\s*($|\n)/i.test(c.text) ? 'sold' : 'active',
+  }));
+  log(`sync: read ${out.length} card(s) on Your listings (${out.filter((c) => c.state === 'sold').length} sold)`);
+  return { cards: out, complete: still >= 3 && out.length > 0 };
+}
+
 export async function findListingIdByTitle(page, title, log = () => {}) {
   if (!/\/marketplace\/you\/selling/.test(page.url())) {
     await page.goto('https://www.facebook.com/marketplace/you/selling', { waitUntil: 'domcontentloaded', timeout: 60000 });

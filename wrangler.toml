@@ -18,8 +18,10 @@ compatibility_date = "2025-01-01"
 [vars]
 # Which Claude model writes listings and answers chat. Any model that reads images.
 MODEL = "claude-sonnet-5-5"
-# Daily ceiling on new Facebook listings, enforced here (the poster cannot exceed it).
-MAX_POSTS_PER_DAY = "20"
+# No daily limit on new listings by default. Set a positive number to add one
+# (enforced here; the poster cannot exceed it). Listings are still spaced a few
+# minutes apart either way.
+# MAX_POSTS_PER_DAY = "10"
 # Your timezone, for pickup times, reminders and the calendar link.
 TIMEZONE = "America/Los_Angeles"
 # Kill switch. Anything other than "on" and approved items simply wait.

@@ -31,7 +31,7 @@ in `poster/.env`).
 | I want to... | Change |
 |---|---|
 | Use a different Claude model | `MODEL` in `wrangler.toml` (any model that reads images) |
-| Post more or fewer a day | `MAX_POSTS_PER_DAY` in `wrangler.toml`. Go slowly; this is the account-safety knob |
+| Cap posts per day | `MAX_POSTS_PER_DAY` in `wrangler.toml` (no limit when unset) |
 | Change how listings are written or priced | the prompt in `researchAndPropose` in `worker/src/index.js` |
 | Another currency or country | the prompt (says US dollars) and `FB_CATEGORIES`, which follow Facebook's labels for your locale |
 | Change the price-drop rule | `proposePriceDrops` (10% after 7 days, never under the floor) |

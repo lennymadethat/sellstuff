@@ -13,7 +13,8 @@ enforced in code, not just promised.
 | 1 | **Your real account only.** Never a second, burner or alias account. | The poster uses one Chrome profile that you signed into yourself. |
 | 2 | **A human tap on every listing and every reply.** Nothing publishes without Approve; no buyer message goes out without Send or your own typed words. | The Worker only ever hands the poster items in `approved`, and replies in `approved`. Only a tap on that reply's card, or text you typed in reply to it, sets that. |
 | 3 | **Human speed.** Random pauses between fields, per-character typing, 4 to 7 minutes between listings. | `poster/fb.mjs`, `poster/poster.mjs` |
-| 4 | **Daily cap.** 20 new listings a day by default; set your own with `MAX_POSTS_PER_DAY`. | The Worker's claim endpoint. The poster can't exceed it. |
+| 4 | **Optional daily cap.** No limit by default; set `MAX_POSTS_PER_DAY` to add one. Spacing between listings applies either way. | The Worker's claim endpoint. The poster can't exceed it. |
+| 4a | **Facebook is the truth.** The poster reads Your listings before claiming work and every few hours; listings you deleted or sold yourself are cleared. A scan that read nothing changes nothing, and a big clear-out asks you first. | `readAllSellingCards` in `poster/fb.mjs`, Worker `/sync` (`worker/src/sync.js`). |
 | 5 | **One at a time.** | `posting` status is a database lock, plus `edit_queued=2` and `delete_queued=2`. |
 | 6 | **Three strikes.** After 3 failed attempts an item is parked as `needs_attention` and not retried. | Worker `markPostFailed`. The claim query never selects parked items. |
 | 7 | **Stop on friction.** A checkpoint, captcha, identity prompt or "unusual activity" screen ends the run untouched and halts the whole lane. | `poster/fb.mjs` scans after every stage. `poster/logs/HALTED` stops the loop until you run `install.ps1 -Resume`. |

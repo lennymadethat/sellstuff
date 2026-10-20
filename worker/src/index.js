@@ -32,6 +32,7 @@ import {
   inboxReport, inboxClaim, inboxSent, inboxFailed, applyReplyDecision, replyFromTelegram, replyIdFromCard,
   applyMeetupDecision, meetupTick, inboxCommand, INBOX_HELP, useTimezone,
 } from './inbox.js';
+import { syncFromFacebook, syncIsFresh, applySyncBulk, clearStaleApprovals } from './sync.js';
 
 // Helpers the buyer-message lane (inbox.js) borrows. Function declarations are
 // hoisted, so this object can sit above them.
@@ -41,6 +42,7 @@ const H = {
   tgSend: (...a) => tgSend(...a),
   parseJson: (s) => parseJson(s),
   logEvent: (...a) => logEvent(...a),
+  askDecision: (...a) => askDecision(...a),
   anthropic: (env, { body }) => {
     if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set');
     return fetch('https://api.anthropic.com/v1/messages', {
@@ -184,7 +186,7 @@ async function sendCard(env, item, heroKey, text, buttons) {
 // Those are notifications, not questions, and adding buttons to them would bury
 // the cards that actually need you.
 
-const DECISION_KINDS = ['nothing_sellable', 'which_listing', 'looks_gone', 'category', 'floor_block'];
+const DECISION_KINDS = ['nothing_sellable', 'which_listing', 'looks_gone', 'category', 'floor_block', 'sync_bulk'];
 
 async function askDecision(env, item, { kind, question, body, choices, payload }) {
   if (!DECISION_KINDS.includes(kind)) throw new Error(`unknown decision kind ${kind}`);
@@ -258,6 +260,12 @@ async function applyDecision(env, decisionId, key) {
     if (note) await tgSend(env, note);
     return json({ ok: true, kind: d.kind, answer: key });
   };
+
+  // Not about one item: the Facebook sync asking before a big clear-out.
+  if (d.kind === 'sync_bulk') {
+    await applySyncBulk(env, H, key);
+    return finish(null, false);
+  }
 
   if (!item) return finish('⚠️ That question is no longer attached to an item.', false);
 
@@ -439,7 +447,8 @@ async function propose(env, item, body) {
     ? `📊 ${agg.n} sold comps $${agg.lo}–$${agg.hi}`
     : `📊 AI-priced — no live sold comps, this is reading photos not sale data`);
   lines.push('');
-  lines.push('Reply to this card with a number to change the price, or <code>why</code> to hear the reasoning.');
+  lines.push(`❓ <b>What's your floor?</b> I'd say $${fresh.price_floor ?? '?'}. Reply to this card with <code>floor 30</code> (your number) before you approve. Buyers never see it.`);
+  lines.push('Reply with a number to change the price, or <code>why</code> to hear the reasoning.');
 
   const buttons = [
     { text: `✅ Approve — post at $${fresh.price_ask}`, callback_data: `ap:${item.id}` },
@@ -531,10 +540,13 @@ async function queue(env, url) {
 
   let limit = null;
   if (status === 'approved') {
-    const cap = parseInt(env.MAX_POSTS_PER_DAY, 10) || 20;
-    const today = await env.DB.prepare("SELECT COUNT(*) AS n FROM items WHERE posted_at IS NOT NULL AND date(posted_at)=date('now')").first();
-    if (today.n >= cap) return json({ ok: true, items: [], capped: true, posted_today: today.n });
-    limit = cap - today.n;
+    // No daily limit unless MAX_POSTS_PER_DAY is set to a positive number.
+    const cap = parseInt(env.MAX_POSTS_PER_DAY, 10) || 0;
+    if (cap > 0) {
+      const today = await env.DB.prepare("SELECT COUNT(*) AS n FROM items WHERE posted_at IS NOT NULL AND date(posted_at)=date('now')").first();
+      if (today.n >= cap) return json({ ok: true, items: [], capped: true, posted_today: today.n });
+      limit = cap - today.n;
+    }
   }
   const rows = await env.DB.prepare(`SELECT * FROM items WHERE status=? ORDER BY updated_at ${limit ? 'LIMIT ' + limit : ''}`)
     .bind(status).all();
@@ -646,9 +658,9 @@ async function claimForPosting(env, body) {
   }
 
   // 2. Otherwise, check for new posts (subject to daily cap)
-  const cap = parseInt(env.MAX_POSTS_PER_DAY, 10) || 20;
+  const cap = parseInt(env.MAX_POSTS_PER_DAY, 10) || 0;
   const today = await env.DB.prepare("SELECT COUNT(*) AS n FROM items WHERE posted_at IS NOT NULL AND date(posted_at)=date('now')").first();
-  if (today.n >= cap) return json({ ok: true, item: null, reason: 'daily-cap', posted_today: today.n });
+  if (cap > 0 && today.n >= cap) return json({ ok: true, item: null, reason: 'daily-cap', posted_today: today.n });
 
   // price_ask > 0 is a hard floor, not a formality: a $0 item means the model
   // found nothing sellable in the photos. propose() already refuses to card
@@ -1288,6 +1300,11 @@ async function tgText(env, msg) {
   const replyId = replyIdFromCard(msg);
   if (replyId) return replyFromTelegram(env, H, replyId, raw);
 
+  if (low === 'clear old') {
+    await clearStaleApprovals(env, H, 3);
+    return json({ ok: true, cmd: 'clear-old' });
+  }
+
   const inboxRes = await inboxCommand(env, H, low, raw);
   if (inboxRes) return inboxRes;
 
@@ -1587,6 +1604,9 @@ async function researchAndPropose(env, item) {
 // Automatic Weekly Price Drops (Markdown)
 // ---------------------------------------------------------------------------
 async function proposePriceDrops(env) {
+  // Only talk about live listings when the poster has looked at Facebook
+  // recently, so nothing you already took down gets a price-drop card.
+  if (!await syncIsFresh(env)) return [{ skipped: 'no recent Facebook sync' }];
   // Query all items currently posted (live listings)
   const items = await env.DB.prepare(
     "SELECT * FROM items WHERE status = 'posted' AND price_ask > 0"
@@ -1718,6 +1738,8 @@ async function nudgeStaleApprovals(env) {
     ...lines,
     '',
     `Nothing posts until you Approve or Reject — scroll back to the listing card${plural ? 's' : ''} above.`,
+    '',
+    `Already sold or gave ${plural ? 'these' : 'it'} away? Text <code>clear old</code> and I'll bin them.`,
   ].join('\n'));
   // Record what it did. A notification that leaves no trace cannot be told
   // apart from one that never fired.
@@ -1843,6 +1865,10 @@ export default {
       if (!b.text) return json({ ok: false, error: 'text required' }, 400);
       await tgSend(env, esc(String(b.text).slice(0, 1500)));
       return json({ ok: true });
+    }
+    // Facebook sync: the poster reads Your listings and the records are corrected.
+    if (path === '/sync' && method === 'POST') {
+      return syncFromFacebook(env, H, await request.json().catch(() => ({})));
     }
     if (path === '/meetup-tick' && method === 'POST') return json({ ok: true, ...(await meetupTick(env, H)) });
     if (path === '/decisions' && method === 'GET') {

@@ -160,7 +160,7 @@ one `poster.mjs` process and no halt.
 
 Tell them: the Worker URL, the bot's username, where the poster runs, the
 model in use (`MODEL` in `wrangler.toml`, default `claude-sonnet-5-5`), the
-daily cap (`MAX_POSTS_PER_DAY`, default 20), and the kill switch (`AUTO_POST_FB
+daily cap (`MAX_POSTS_PER_DAY`, none by default), and the kill switch (`AUTO_POST_FB
 = "off"`, then `npx wrangler deploy`). Remind them: every listing costs a
 Claude call; nothing posts without their tap; a Facebook checkpoint halts the
 poster until they clear it and run `install.ps1 -Resume`. Ask them where pickups should happen and when

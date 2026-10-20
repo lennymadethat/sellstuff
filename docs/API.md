@@ -39,6 +39,7 @@ header, with the key from `poster/.env`.
 | `POST /inbox/claim` | Hands out one approved reply: `{reply: {id, thread_key, thread_url, buyer_name, text}}`, or `{reply: null, reason}`. |
 | `POST /inbox/<id>/sent` | The reply is in the chat. Books the pickup if it confirmed one. |
 | `POST /inbox/<id>/failed` | `{reason, checkpoint?, definitely_not_sent?}` |
+| `POST /sync` | `{cards: [{id, title, state: "active" \| "sold"}], complete: true, dry?}` Corrects records to Your listings. `dry: true` reports the plan and changes nothing. |
 | `POST /notify` | `{text}` A plain message to your Telegram (e.g. "Chrome is signed out"). |
 | `POST /meetup-tick` | Run the pickup reminder / "did it sell?" pass now. |
 

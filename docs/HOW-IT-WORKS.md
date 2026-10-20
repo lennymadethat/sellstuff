@@ -40,6 +40,15 @@ The poster claims one of three kinds of job, in this order:
 
 Deletes and edits don't count against the daily cap.
 
+## Facebook sync
+
+On start and every 6 hours, before claiming any work, the poster scrolls your
+Your listings page and reads every card with its state, then posts them to
+`/sync`. A card marked Active keeps the listing live (and records its link); a
+card marked Sold marks it sold; no card means you deleted it, so it is
+archived. Archived and sold items get no more price drops, edits or removals.
+Price drops pause entirely if Facebook hasn't been read in 30 hours.
+
 ## Buyer messages and pickups
 
 | # | Who | What happens |
